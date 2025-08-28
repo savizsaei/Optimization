@@ -1,0 +1,90 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{geometry}
+\geometry{a4paper, margin=1in}
+
+\title{Stochastic Facility Location Model with Gurobi}
+\author{Your Name}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{Problem Description}
+
+This project contains a Python script that formulates and solves a two-stage stochastic facility location problem using the Gurobi optimization solver. The model determines the optimal locations to open a set of facilities to minimize the total expected cost, which includes fixed opening costs and variable costs related to serving customer demand under uncertainty.
+
+The problem is a classic two-stage stochastic program:
+
+\begin{itemize}
+    \item \textbf{First Stage (Here-and-Now Decisions):} We must decide which facilities to open from a set of candidate locations. These decisions are made \textit{before} the uncertainty is resolved. The cost associated with this stage is the fixed cost of opening the selected facilities.
+
+    \item \textbf{Second Stage (Wait-and-See Decisions):} After the first-stage decisions are made, a specific "scenario" unfolds, revealing the actual customer demands and facility capacities. We then have to decide how to allocate demand from customers to the open facilities. The costs in this stage include transportation costs for shipping goods and penalties for any unmet demand.
+\end{itemize}
+
+The objective is to minimize the sum of the first-stage costs and the \textit{expected} second-stage costs, averaged over all possible scenarios.
+
+\subsection*{Key Feature: Closest Facilities Constraint}
+
+A specific constraint in this model is that each customer's demand can only be met by one of the \textbf{K closest open facilities}. This is a practical constraint to ensure that service remains localized and travel distances are minimized. This is implemented efficiently by pre-calculating the distances and building the model using only this reduced set of valid connections.
+
+\section{Mathematical Formulation}
+
+\subsection*{Sets and Indices}
+\begin{itemize}
+    \item $I$: Set of customer locations, $i \in I$
+    \item $J$: Set of candidate facility locations, $j \in J$
+    \item $S$: Set of scenarios, $s \in S$
+    \item $N_i$: Set of the $K$ closest candidate facilities to customer $i$.
+\end{itemize}
+
+\subsection*{Parameters}
+\begin{itemize}
+    \item $f_j$: Fixed cost of opening facility $j$.
+    \item $c_{ij}$: Cost to transport one unit of demand from customer $i$ to facility $j$.
+    \item $p_s$: Probability of scenario $s$ occurring.
+    \item $d_{is}$: Demand of customer $i$ in scenario $s$.
+    \item $M_{js}$: Capacity of facility $j$ in scenario $s$.
+    \item $q$: Penalty cost for one unit of unmet demand.
+\end{itemize}
+
+\subsection*{Decision Variables}
+\begin{itemize}
+    \item \textbf{First Stage:}
+        \begin{itemize}
+            \item $y_j \in \{0, 1\}$: 1 if facility $j$ is opened, 0 otherwise.
+        \end{itemize}
+    \item \textbf{Second Stage:}
+        \begin{itemize}
+            \item $x_{ijs} \ge 0$: Amount of demand from customer $i$ allocated to facility $j$ in scenario $s$.
+            \item $u_{is} \ge 0$: Unmet demand for customer $i$ in scenario $s$.
+        \end{itemize}
+\end{itemize}
+
+\subsection*{Objective Function}
+Minimize the total expected cost:
+\begin{equation}
+    \min \sum_{j \in J} f_j y_j + \sum_{s \in S} p_s \left( \sum_{i \in I} \sum_{j \in N_i} c_{ij} x_{ijs} + \sum_{i \in I} q \cdot u_{is} \right)
+\end{equation}
+
+\subsection*{Constraints}
+\begin{enumerate}
+    \item \textbf{Demand Satisfaction:} For each customer in each scenario, the total allocated demand plus unmet demand must equal the total demand.
+    \begin{equation}
+        \sum_{j \in N_i} x_{ijs} + u_{is} = d_{is} \quad \forall i \in I, s \in S
+    \end{equation}
+
+    \item \textbf{Capacity Constraint:} For each facility in each scenario, the total demand served cannot exceed its capacity. This also ensures that demand is only allocated to an \textit{open} facility.
+    \begin{equation}
+        \sum_{i \in I \text{ s.t. } j \in N_i} x_{ijs} \le M_{js} y_j \quad \forall j \in J, s \in S
+    \end{equation}
+
+    \item \textbf{Variable Domains:}
+    \begin{align*}
+        y_j &\in \{0, 1\} && \forall j \in J \\
+        x_{ijs} &\ge 0 && \forall i \in I, j \in N_i, s \in S \\
+        u_{is} &\ge 0 && \forall i \in I, s \in S
+    \end{align*}
+\end{enumerate}
+
+\end{document}
